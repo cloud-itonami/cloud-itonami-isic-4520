@@ -1,0 +1,70 @@
+(ns autorepair.phase-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [langgraph.graph :as g]
+            [autorepair.store :as store]
+            [autorepair.phase :as phase]
+            [autorepair.operation :as op]))
+
+(def writer {:actor-id "sw-1" :actor-role :service-writer})
+(def tech   {:actor-id "tc-1" :actor-role :technician})
+
+(def clean-log
+  {:op :log-service-record :subject "ro-100" :order-id "ro-100"
+   :parts-used ["oil-filter"] :labor-hours 1.0 :technician "tc-1"})
+
+(def clean-schedule
+  {:op :schedule-service-operation :subject "ro-100" :order-id "ro-100"
+   :bay "bay-1" :technician "tc-1" :start "t0" :end "t1"})
+
+(def safety-flag-req
+  {:op :flag-safety-concern :subject "ro-100" :order-id "ro-100"
+   :concern "demo concern" :severity :low})
+
+(defn- run [phase req ctx]
+  (let [s (store/seed-db)
+        actor (op/build s)]
+    [s (g/run* actor {:request req :context (assoc ctx :phase phase)}
+               {:thread-id (str "ph-" phase "-" (:op req))})]))
+
+(deftest phase0-holds-all-writes
+  (let [[s res] (run 0 clean-log writer)]
+    (is (= :hold (get-in res [:state :disposition])))
+    (is (= :phase-disabled (-> (store/ledger s) first :phase-reason)))))
+
+(deftest phase1-forces-approval-on-clean-log
+  (let [[_ res] (run 1 clean-log writer)]
+    (is (= :interrupted (:status res)))
+    (is (= :phase-approval (-> res :state :audit last :reason)))))
+
+(deftest phase1-blocks-schedule-not-yet-enabled
+  (let [[s res] (run 1 clean-schedule writer)]
+    (is (= :hold (get-in res [:state :disposition])))
+    (is (= :phase-disabled (-> (store/ledger s) first :phase-reason)))))
+
+(deftest phase2-enables-schedule-under-approval
+  (let [[_ res] (run 2 clean-schedule writer)]
+    (is (= :interrupted (:status res)))
+    (is (= :phase-approval (-> res :state :audit last :reason)))))
+
+(deftest phase3-auto-commits-clean-log
+  (let [[s res] (run 3 clean-log writer)]
+    (is (= :commit (get-in res [:state :disposition])))
+    (is (= 1 (count (store/service-log s))))))
+
+(deftest governor-hold-beats-phase
+  (testing "a hard governor violation (unregistered repair-order) holds even in the most permissive phase"
+    (let [[_ res] (run 3 {:op :log-service-record :subject "ro-999" :order-id "ro-999"
+                          :parts-used [] :labor-hours 0.0 :technician "tc-1"}
+                       writer)]
+      (is (= :hold (get-in res [:state :disposition]))))))
+
+(deftest flag-safety-concern-never-auto-commits-at-any-phase
+  (doseq [ph [0 1 2 3]]
+    (let [[_ res] (run ph safety-flag-req tech)]
+      (is (not= :commit (get-in res [:state :disposition]))
+          (str "phase " ph " must not auto-commit a safety-concern flag")))))
+
+(deftest flag-safety-concern-not-in-any-phases-auto-set
+  (doseq [[phase-n {:keys [auto]}] phase/phases]
+    (is (not (contains? auto :flag-safety-concern))
+        (str "phase " phase-n " :auto must never contain :flag-safety-concern"))))

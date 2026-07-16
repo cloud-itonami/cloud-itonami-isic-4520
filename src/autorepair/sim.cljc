@@ -1,0 +1,98 @@
+(ns autorepair.sim
+  "Demo runner: push representative operations through one OperationActor
+  and watch the AutoRepairGovernor + approval workflow earn the
+  AutoRepair-LLM the right to log/schedule/flag/coordinate.
+
+    op1  正常な repair-order へのサービス記録ログ          → commit
+    op2  正常な repair-order へのスケジューリング提案       → commit
+    op3  安全上の懸念のフラグ(常に人間レビュー)             → escalate → approve → commit
+    op4  閾値以下の部品発注                                 → commit
+    op5  閾値超過の部品発注                                 → escalate → approve → commit
+    op6  未登録の repair-order へのログ試行                 → registration-gate REJECT → hold
+    op7  license が失効した shop の repair-order            → registration-gate REJECT → hold
+    op8  権限の無い role からの提案                          → rbac REJECT → hold
+
+  Run: clojure -M:dev:run"
+  (:require [langgraph.graph :as g]
+            [autorepair.store :as store]
+            [autorepair.operation :as op]))
+
+(defn- line [& xs] (println (apply str xs)))
+
+(defn- run-op! [actor thread-id request context approve?]
+  (let [res (g/run* actor {:request request :context context} {:thread-id thread-id})]
+    (if (= :interrupted (:status res))
+      (do (line "   ⏸  人間レビュー待ち (reason: "
+                (-> res :state :audit last :reason) ")")
+          (let [res2 (g/run* actor
+                             {:approval {:status (if approve? :approved :rejected)
+                                         :by "manager-1"}}
+                             {:thread-id thread-id :resume? true})]
+            (line "   ▶  " (if approve? "承認 → " "却下 → ") "disposition = "
+                  (get-in res2 [:state :disposition]))
+            res2))
+      (do (line "   → disposition = " (get-in res [:state :disposition])
+                "  (confidence " (get-in res [:state :verdict :confidence]) ")")
+          res))))
+
+(defn -main [& _]
+  (let [db    (store/seed-db)
+        actor (op/build db)
+        writer  {:actor-id "sw-1" :actor-role :service-writer :phase 3}
+        tech    {:actor-id "tc-1" :actor-role :technician :phase 3}]
+
+    (line "── OperationActor (AutoRepair-LLM sealed; AutoRepairGovernor active) ──")
+
+    (line "\nop1  正常な repair-order へのサービス記録ログ")
+    (run-op! actor "op1"
+             {:op :log-service-record :subject "ro-100" :order-id "ro-100"
+              :parts-used ["brake-pad-set"] :labor-hours 1.5 :technician "tc-1"}
+             writer true)
+
+    (line "\nop2  正常な repair-order へのスケジューリング提案")
+    (run-op! actor "op2"
+             {:op :schedule-service-operation :subject "ro-100" :order-id "ro-100"
+              :bay "bay-2" :technician "tc-1" :start "2026-07-16T09:00" :end "2026-07-16T11:00"}
+             writer true)
+
+    (line "\nop3  安全上の懸念のフラグ(常に人間レビュー)")
+    (run-op! actor "op3"
+             {:op :flag-safety-concern :subject "ro-100" :order-id "ro-100"
+              :concern "ブレーキラインの腐食を発見" :severity :high}
+             tech true)
+
+    (line "\nop4  閾値以下の部品発注")
+    (run-op! actor "op4"
+             {:op :coordinate-parts-order :subject "ro-100" :order-id "ro-100"
+              :parts ["brake-pad-set"] :cost 250.00M :vendor "Demo Parts Co (fictitious)"}
+             writer true)
+
+    (line "\nop5  閾値超過の部品発注")
+    (run-op! actor "op5"
+             {:op :coordinate-parts-order :subject "ro-300" :order-id "ro-300"
+              :parts ["engine-block"] :cost 4200.00M :vendor "Demo Parts Co (fictitious)"}
+             writer true)
+
+    (line "\nop6  未登録の repair-order へのログ試行")
+    (run-op! actor "op6"
+             {:op :log-service-record :subject "ro-999" :order-id "ro-999"
+              :parts-used [] :labor-hours 0.5 :technician "tc-1"}
+             writer true)
+
+    (line "\nop7  license が失効した shop の repair-order")
+    (run-op! actor "op7"
+             {:op :log-service-record :subject "ro-200" :order-id "ro-200"
+              :parts-used ["oil-filter"] :labor-hours 0.5 :technician "tc-1"}
+             writer true)
+
+    (line "\nop8  権限の無い role からの提案")
+    (run-op! actor "op8"
+             {:op :coordinate-parts-order :subject "ro-100" :order-id "ro-100"
+              :parts ["oil-filter"] :cost 40.00M :vendor "Demo Parts Co (fictitious)"}
+             tech true)
+
+    (line "\n── 監査台帳 (append-only) ──")
+    (doseq [f (store/ledger db)]
+      (line "  " (pr-str f)))
+
+    (line "\ndone.")))

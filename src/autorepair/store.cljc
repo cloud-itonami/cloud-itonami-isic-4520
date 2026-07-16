@@ -1,0 +1,180 @@
+(ns autorepair.store
+  "SSoT for the auto-repair-shop OPERATIONS-COORDINATION actor, behind a
+  `Store` protocol so the backend is a swap, not a rewrite:
+
+    - `MemStore`     — atom of EDN. Deterministic default for dev/tests/demo
+                        (no deps).
+    - `DatomicStore` — backed by `langchain.db`, a Datomic-API-compatible EAV
+                        store (datalog q / pull / upsert). Pure `.cljc`, so
+                        it runs offline AND can be pointed at a real Datomic
+                        Local or a kotoba-server pod by swapping
+                        `langchain.db`'s `:db-api` (see langchain.kotoba-db).
+
+  Both implement the same protocol and pass the same contract
+  (test/autorepair/store_contract_test.cljc).
+
+  Entity shapes: a `repair-order` (order-id, VIN, shop-id, customer, status)
+  and the `shop-license` that authorizes the shop performing it. Every one
+  of the four coordination ops (log-service-record / schedule-service-
+  operation / flag-safety-concern / coordinate-parts-order) is gated on
+  BOTH existing and being active before any of them may proceed
+  (`autorepair.governor`'s registration-gate) — this store never invents
+  either.
+
+  The four op-specific logs (service-log / schedule-log / safety-flags /
+  parts-orders) plus the audit ledger are append-only EVENT streams — this
+  actor only ever LOGS a coordination proposal, it never executes a repair,
+  controls shop equipment, or finalizes a roadworthiness-clearance decision
+  (see `autorepair.governor`'s :effect-propose-only /
+  :roadworthiness-clearance-scope-exclusion gates and docs/adr/0001).
+
+  The shared `enc`/`dec*` EDN-blob codec, `:db.unique/identity` schema
+  builder and seq-keyed event-log read/append are
+  `kotoba-lang/langchain-store` (ADR-2607141600) — this store does not
+  hand-roll its own copy."
+  (:require [langchain.db :as d]
+            [langchain-store.core :as ls]))
+
+(defprotocol Store
+  (repair-order [s order-id])
+  (shop-license [s shop-id])
+  (service-log [s] "append-only committed :log-service-record entries")
+  (schedule-log [s] "append-only committed :schedule-service-operation entries")
+  (safety-flags [s] "append-only committed :flag-safety-concern entries")
+  (parts-orders [s] "append-only committed :coordinate-parts-order entries")
+  (ledger [s])
+  (commit-record! [s record] "apply a committed op's coordination record to the SSoT")
+  (append-ledger! [s fact]   "append one immutable decision fact")
+  (with-repair-orders [s ros] "replace/seed repair orders (map order-id->repair-order)")
+  (with-shop-licenses [s lics] "replace/seed shop licenses (map shop-id->shop-license)"))
+
+;; ───────────────────────── demo data (fictitious) ─────────────────────
+
+(defn demo-data
+  "A small, entirely fictitious dataset so the actor + tests run offline —
+  no real shop, VIN or license is ever asserted by this repository.
+  `ro-200` is deliberately parked at a shop whose license has lapsed
+  (`shop-2`), and `ro-999` deliberately does not exist, purely to exercise
+  the registration-gate."
+  []
+  {:repair-orders
+   {"ro-100" {:order-id "ro-100" :vin "demo-vin-100" :shop-id "shop-1"
+              :customer "cust-1 (fictitious)" :status :open}
+    "ro-200" {:order-id "ro-200" :vin "demo-vin-200" :shop-id "shop-2"
+              :customer "cust-2 (fictitious)" :status :open}
+    "ro-300" {:order-id "ro-300" :vin "demo-vin-300" :shop-id "shop-1"
+              :customer "cust-3 (fictitious)" :status :open}}
+   :shop-licenses
+   {"shop-1" {:shop-id "shop-1" :provider "Demo Certified Auto Repair (fictitious)"
+              :jurisdiction :ca :active? true}
+    "shop-2" {:shop-id "shop-2" :provider "Lapsed Demo Repair Shop License (fictitious)"
+              :jurisdiction :tx :active? false}}})
+
+;; ───────────────────────── MemStore (default) ─────────────────────────
+
+(defn- append! [a k value]
+  (swap! a update k conj value))
+
+(defrecord MemStore [a]
+  Store
+  (repair-order [_ order-id] (get-in @a [:repair-orders order-id]))
+  (shop-license [_ shop-id] (get-in @a [:shop-licenses shop-id]))
+  (service-log [_] (:service-log @a))
+  (schedule-log [_] (:schedule-log @a))
+  (safety-flags [_] (:safety-flags @a))
+  (parts-orders [_] (:parts-orders @a))
+  (ledger [_] (:ledger @a))
+  (commit-record! [s {:keys [op value]}]
+    (case op
+      :log-service-record         (append! a :service-log value)
+      :schedule-service-operation (append! a :schedule-log value)
+      :flag-safety-concern        (append! a :safety-flags value)
+      :coordinate-parts-order     (append! a :parts-orders value)
+      nil)
+    s)
+  (append-ledger! [_ fact] (swap! a update :ledger conj fact) fact)
+  (with-repair-orders [s ros]  (when (seq ros) (swap! a assoc :repair-orders ros)) s)
+  (with-shop-licenses [s lics] (when (seq lics) (swap! a assoc :shop-licenses lics)) s))
+
+(defn seed-db
+  "A MemStore seeded with the demo data. The deterministic default."
+  []
+  (->MemStore (atom (assoc (demo-data)
+                           :service-log [] :schedule-log []
+                           :safety-flags [] :parts-orders [] :ledger []))))
+
+;; ───────────────────────── DatomicStore (langchain.db) ─────────────────
+
+(def ^:private schema
+  (merge
+   (ls/identity-schema [:repair-order/id :shop-license/id])
+   {:ledger/seq {:db/unique :db.unique/identity}
+    :service-log/seq {:db/unique :db.unique/identity}
+    :schedule-log/seq {:db/unique :db.unique/identity}
+    :safety-flag/seq {:db/unique :db.unique/identity}
+    :parts-order/seq {:db/unique :db.unique/identity}}))
+
+(def ^:private repair-order-spec
+  {:order-id {:attr :repair-order/id}
+   :vin      {:attr :repair-order/vin}
+   :shop-id  {:attr :repair-order/shop-id}
+   :customer {:attr :repair-order/customer}
+   :status   {:attr :repair-order/status}})
+
+(def ^:private shop-license-spec
+  {:shop-id      {:attr :shop-license/id}
+   :provider     {:attr :shop-license/provider}
+   :jurisdiction {:attr :shop-license/jurisdiction}
+   :active?      {:attr :shop-license/active :coerce boolean}})
+
+(defn- ro->tx [m] (ls/map->tx repair-order-spec m))
+(def ^:private ro-pull (ls/pull-pattern repair-order-spec))
+(defn- pull->ro [m] (ls/pull->map repair-order-spec :order-id m))
+
+(defn- lic->tx [m] (ls/map->tx shop-license-spec m))
+(def ^:private lic-pull (ls/pull-pattern shop-license-spec))
+(defn- pull->lic [m] (ls/pull->map shop-license-spec :shop-id m))
+
+(defrecord DatomicStore [conn]
+  Store
+  (repair-order [_ order-id]
+    (pull->ro (d/pull (d/db conn) ro-pull [:repair-order/id order-id])))
+  (shop-license [_ shop-id]
+    (pull->lic (d/pull (d/db conn) lic-pull [:shop-license/id shop-id])))
+  (service-log [_] (ls/read-stream conn :service-log/seq :service-log/entry))
+  (schedule-log [_] (ls/read-stream conn :schedule-log/seq :schedule-log/entry))
+  (safety-flags [_] (ls/read-stream conn :safety-flag/seq :safety-flag/entry))
+  (parts-orders [_] (ls/read-stream conn :parts-order/seq :parts-order/entry))
+  (ledger [_] (ls/read-stream conn :ledger/seq :ledger/fact))
+  (commit-record! [s {:keys [op value]}]
+    (case op
+      :log-service-record
+      (ls/append-blob! conn :service-log/seq :service-log/entry (count (service-log s)) value)
+
+      :schedule-service-operation
+      (ls/append-blob! conn :schedule-log/seq :schedule-log/entry (count (schedule-log s)) value)
+
+      :flag-safety-concern
+      (ls/append-blob! conn :safety-flag/seq :safety-flag/entry (count (safety-flags s)) value)
+
+      :coordinate-parts-order
+      (ls/append-blob! conn :parts-order/seq :parts-order/entry (count (parts-orders s)) value)
+
+      nil)
+    s)
+  (append-ledger! [s fact]
+    (ls/append-blob! conn :ledger/seq :ledger/fact (count (ledger s)) fact)
+    fact)
+  (with-repair-orders [s ros]
+    (when (seq ros) (d/transact! conn (mapv ro->tx (vals ros)))) s)
+  (with-shop-licenses [s lics]
+    (when (seq lics) (d/transact! conn (mapv lic->tx (vals lics)))) s))
+
+(defn datomic-store
+  ([] (datomic-store {}))
+  ([{:keys [repair-orders shop-licenses]}]
+   (let [s (->DatomicStore (d/create-conn schema))]
+     (-> s (with-repair-orders repair-orders) (with-shop-licenses shop-licenses)))))
+
+(defn datomic-seed-db []
+  (datomic-store (demo-data)))
