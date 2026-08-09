@@ -12,7 +12,14 @@
         ;; cloud-itonami actors hand-roll (ADR-2607141600). A NEW store
         ;; requires this rather than re-copying enc/dec*.
         io.github.kotoba-lang/langchain-store
-        {:local/root "../../kotoba-lang/langchain-store"}}
+        {:local/root "../../kotoba-lang/langchain-store"}
+        ;; workspace BASE design system (デジタル庁デザインシステム / DADS),
+        ;; used ONLY by the build-time HTML renderer (`:render-html`) to
+        ;; style docs/samples/operator-console.html. Consumed as a git dep
+        ;; rather than :local/root so a standalone fork can still render.
+        io.github.kotoba-lang/jp-go-digital-design-system
+        {:git/url "https://github.com/kotoba-lang/jp-go-digital-design-system"
+         :git/sha "83db99546eabc53613ae826ea41d1533a3c574af"}}
  :aliases
  {;; offline workspace dev -- pin transitive langchain-clj to local checkout
   :dev {:override-deps
@@ -20,6 +27,11 @@
          {:local/root "../../kotoba-lang/langchain"}}}
   ;; clojure -M:dev:run  -> drive the demo through one OperationActor
   :run {:main-opts ["-m" "autorepair.sim"]}
+  ;; clojure -M:dev:render-html [out-file] -> regenerate
+  ;; docs/samples/operator-console.html by REALLY running the actor
+  ;; (flagship checklist item 2). Deterministic: two runs are
+  ;; byte-identical.
+  :render-html {:main-opts ["-m" "autorepair.render-html"]}
   :test {:extra-paths ["test"]
          :extra-deps {io.github.cognitect-labs/test-runner
                       {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
