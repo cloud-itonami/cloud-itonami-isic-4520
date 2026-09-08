@@ -62,7 +62,7 @@
   the actor's own happy path. See `autorepair.governor-contract-test`'s
   `default-advisor-proposals-never-self-trip-scope-exclusion` test, which
   exists specifically to catch a regression here."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [autorepair.store :as store]))
 
 ;; ───────────────────────── policy tables ─────────────────────────
@@ -162,8 +162,8 @@
   [proposal]
   (let [value (:value proposal)
         key-hit (some forbidden-clearance-value-keys (keys (or value {})))
-        text (str/lower-case (str (:summary proposal) " " (:rationale proposal)))
-        phrase-hit (some #(str/includes? text (str/lower-case %))
+        text (str/lower (str (:summary proposal) " " (:rationale proposal)))
+        phrase-hit (some #(str/includes? text (str/lower %))
                          finalization-action-phrases)]
     (when (or key-hit phrase-hit)
       [{:rule :roadworthiness-clearance-scope-exclusion
