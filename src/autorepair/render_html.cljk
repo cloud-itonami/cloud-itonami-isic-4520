@@ -21,17 +21,17 @@
   code. The subject ids are read back through the `Store` protocol
   (`store/repair-order` / `store/shop-license`) against the ids that
   `store/demo-data` actually seeds -- confirmed against
-  `clojure -M:dev:run` BEFORE this file was written, so no id in the page
+  `kbb -M:dev:run` BEFORE this file was written, so no id in the page
   is one the store lacks.
 
   DETERMINISTIC: the advisor is the deterministic mock, no timestamps or
   randomness reach the page, and every unordered collection read out of
   the code (sets, maps) is explicitly sorted before rendering. Two
   consecutive runs are byte-identical -- verify with
-  `clojure -M:dev:render-html && cp docs/samples/operator-console.html /tmp/a
-   && clojure -M:dev:render-html && diff /tmp/a docs/samples/operator-console.html`.
+  `kbb -M:dev:render-html && cp docs/samples/operator-console.html /tmp/a
+   && kbb -M:dev:render-html && diff /tmp/a docs/samples/operator-console.html`.
 
-  Usage: `clojure -M:dev:render-html [out-file]`
+  Usage: `kbb -M:dev:render-html [out-file]`
   (default `docs/samples/operator-console.html`)."
   (:require [clojure.java.io :as io]
             [kotoba.lang.text :as str]
@@ -405,7 +405,7 @@
      (code "autorepair.store/seed-db") " → " (code "autorepair.operation/build")
      " → " (code "langgraph.graph/run*") " → " (code "autorepair.governor/check")
      " → " (code "autorepair.phase/gate") ". Regenerate with "
-     (code "clojure -M:dev:render-html") ". The gate tables are derived from the live values of "
+     (code "kbb -M:dev:render-html") ". The gate tables are derived from the live values of "
      (code "autorepair.governor/permissions") ", " (code "autorepair.governor/allowed-ops")
      " and " (code "autorepair.phase/phases") ", so this page cannot drift away from the code. "
      "The dataset is entirely fictitious — no real shop, VIN or licence is asserted here.</p>\n"
