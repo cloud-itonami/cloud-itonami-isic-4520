@@ -2471,7 +2471,7 @@ img,svg { max-width: 100%; height: auto; }</style></head>
 <main>
   <section class="card">
     <h2>How this page was made</h2>
-    <p>Every id, number, disposition and hold rule below is produced at build time by actually running this repository's actor stack — <code>autorepair.store/seed-db</code> → <code>autorepair.operation/build</code> → <code>langgraph.graph/run*</code> → <code>autorepair.governor/check</code> → <code>autorepair.phase/gate</code>. Regenerate with <code>clojure -M:dev:render-html</code>. The gate tables are derived from the live values of <code>autorepair.governor/permissions</code>, <code>autorepair.governor/allowed-ops</code> and <code>autorepair.phase/phases</code>, so this page cannot drift away from the code. The dataset is entirely fictitious — no real shop, VIN or licence is asserted here.</p>
+    <p>Every id, number, disposition and hold rule below is produced at build time by actually running this repository's actor stack — <code>autorepair.store/seed-db</code> → <code>autorepair.operation/build</code> → <code>langgraph.graph/run*</code> → <code>autorepair.governor/check</code> → <code>autorepair.phase/gate</code>. Regenerate with <code>kbb -M:dev:render-html</code>. The gate tables are derived from the live values of <code>autorepair.governor/permissions</code>, <code>autorepair.governor/allowed-ops</code> and <code>autorepair.phase/phases</code>, so this page cannot drift away from the code. The dataset is entirely fictitious — no real shop, VIN or licence is asserted here.</p>
   </section>
   <section class="card">
     <h2>Registered repair orders (SSoT)</h2>

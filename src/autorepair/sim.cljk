@@ -12,7 +12,7 @@
     op7  license が失効した shop の repair-order            → registration-gate REJECT → hold
     op8  権限の無い role からの提案                          → rbac REJECT → hold
 
-  Run: clojure -M:dev:run"
+  Run: kbb -M:dev:run"
   (:require [langgraph.graph :as g]
             [autorepair.store :as store]
             [autorepair.operation :as op]))

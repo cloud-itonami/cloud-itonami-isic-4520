@@ -69,7 +69,7 @@ roadworthiness clearance" のような複合 ACTION フレーズのみで構成�
 ## Consequences
 
 - (+) `kotoba-lang/industry` registry の 4520 スロットが実装へ昇格。
-- (+) `clojure -M:dev:test`/`clojure -M:lint` で検証済み。
+- (+) `kbb -M:dev:test`/`kbb -M:lint` で検証済み。
 - (-) この actor は roadworthiness authority を一切持たない — 実際の
   整備完了判断・走行可否判定は常に人間(整備士/検査員)が別途行う。
 

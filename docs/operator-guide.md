@@ -5,8 +5,8 @@
 ```bash
 git clone https://github.com/cloud-itonami/cloud-itonami-isic-4520
 cd cloud-itonami-isic-4520
-clojure -M:dev:test
-clojure -M:dev:run
+kbb -M:dev:test
+kbb -M:dev:run
 ```
 
 ## 2. Production Checklist
@@ -18,7 +18,7 @@ clojure -M:dev:run
 - define service-writer/technician/shop-manager RBAC rules for your shop
 - set `autorepair.governor/parts-order-cost-threshold` to your shop's real
   approval threshold
-- run `clojure -M:dev:test` / `clojure -M:lint`
+- run `kbb -M:dev:test` / `kbb -M:lint`
 - verify audit-ledger export
 - get written legal/insurance review before connecting this actor to any
   real roadworthiness-adjacent workflow — this actor structurally never

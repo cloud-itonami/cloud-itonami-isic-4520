@@ -70,9 +70,9 @@ coordinates a record the AutoRepairGovernor would reject.
 ## Run
 
 ```bash
-clojure -M:dev:test
-clojure -M:dev:run
-clojure -M:lint
+kbb -M:dev:test
+kbb -M:dev:run
+kbb -M:lint
 ```
 
 ## Non-Negotiables
