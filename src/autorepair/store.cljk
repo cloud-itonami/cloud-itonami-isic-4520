@@ -11,7 +11,7 @@
                         `langchain.db`'s `:db-api` (see langchain.kotoba-db).
 
   Both implement the same protocol and pass the same contract
-  (test/autorepair/store_contract_test.cljc).
+  (test/autorepair/store_contract_test.cljk).
 
   Entity shapes: a `repair-order` (order-id, VIN, shop-id, customer, status)
   and the `shop-license` that authorizes the shop performing it. Every one
