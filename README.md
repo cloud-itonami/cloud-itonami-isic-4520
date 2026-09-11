@@ -30,7 +30,7 @@ equipment. There is no op anywhere in this schema that finalizes a
 roadworthiness/safe-to-drive clearance decision — and even a compromised or
 off-spec advisor attempting to smuggle one in through an otherwise-
 legitimate op is a HARD, PERMANENT, un-overridable block (see
-`src/autorepair/governor.cljc`'s `:roadworthiness-clearance-scope-exclusion`
+`src/autorepair/governor.cljk`'s `:roadworthiness-clearance-scope-exclusion`
 gate and `docs/adr/0001-architecture.md`).
 
 Every proposal this actor can ever commit carries `:effect :propose` — the
