@@ -7,7 +7,7 @@
   Also carries the dedicated regression test for the self-tripping
   scope-exclusion bug class this exact actor family has repeatedly hit:
   `default-advisor-proposals-never-self-trip-scope-exclusion`."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [langgraph.graph :as g]
             [autorepair.store :as store]
             [autorepair.governor :as governor]
