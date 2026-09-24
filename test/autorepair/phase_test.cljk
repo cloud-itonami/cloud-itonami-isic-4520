@@ -1,5 +1,5 @@
 (ns autorepair.phase-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [langgraph.graph :as g]
             [autorepair.store :as store]
             [autorepair.phase :as phase]

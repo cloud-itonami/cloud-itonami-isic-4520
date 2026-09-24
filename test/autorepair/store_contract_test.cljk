@@ -3,7 +3,7 @@
   Datomic-backed (langchain.db) store satisfy the same contract is what
   makes 'swap the SSoT for Datomic / kotoba-server' a configuration
   change, not a rewrite."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [autorepair.store :as store]))
 
 (defn- backends []
