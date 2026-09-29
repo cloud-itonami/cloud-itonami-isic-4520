@@ -1,7 +1,7 @@
 (ns autorepair.portable-cljs-test-runner
   "PRIMARY automated quality gate for this actor under a real
   ClojureScript host (cljs.main --target node) — the same runtime-
-  priority rule as the superproject CLAUDE.md:
+  priority rule as the superproject AGENTS.md:
 
       kotoba wasm runtime  >  clojurewasm  >  ClojureScript  >  nbb
       (JVM / babashka are last-resort compat, not the design target)

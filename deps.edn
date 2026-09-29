@@ -57,7 +57,7 @@
                       {:git/tag "v0.5.1" :git/sha "dfb30dd6605cb6c0efc275e1df1736f6e90d4d73"}}
          :main-opts ["-m" "cognitect.test-runner"]
          :exec-fn cognitect.test-runner.api/test}
-  ;; PRIMARY gate (cljs-first, ADR / superproject CLAUDE.md runtime
+  ;; PRIMARY gate (cljs-first, ADR / superproject AGENTS.md runtime
   ;; priority): the same portable .cljc suite under a real ClojureScript
   ;; host.
   ;;   kbb -Sdeps '{:paths ["src" "test"]}' -M:dev:cljs \
