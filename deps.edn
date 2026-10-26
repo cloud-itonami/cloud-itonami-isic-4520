@@ -30,14 +30,15 @@
         ;; cloud-itonami actors hand-roll (ADR-2607141600). A NEW store
         ;; requires this rather than re-copying enc/dec*.
         io.github.kotoba-lang/langchain-store
-        {:local/root "../../kotoba-lang/langchain-store"}
+        {:local/root "../../kotoba-lang/kotoba/lib/kotoba.langchainStore"}
         ;; workspace BASE design system (デジタル庁デザインシステム / DADS),
         ;; used ONLY by the build-time HTML renderer (`:render-html`) to
         ;; style docs/samples/operator-console.html. Consumed as a git dep
         ;; rather than :local/root so a standalone fork can still render.
         io.github.kotoba-lang/jp-go-digital-design-system
-        {:git/url "https://github.com/kotoba-lang/jp-go-digital-design-system"
-         :git/sha "83db99546eabc53613ae826ea41d1533a3c574af"}}
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "e09192276fd6a111dfb9959bfc75ddeba555e840"
+         :deps/root "lib/kotoba.jpGoDigitalDesignSystem"}}
  :aliases
  {;; This alias held an :override-deps entry for the retired coordinate
   ;; io.github.com-junkawasaki/langchain-clj. langgraph declares the same
